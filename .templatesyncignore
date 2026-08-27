@@ -11,6 +11,11 @@ LICENSE
 # GitHub workflows are not synced by default due to GitHub policy
 .github/workflows/**
 
+# Customized for this repo's actual stack (Node.js/TypeScript) — don't let
+# the generic multi-language template versions overwrite them on sync.
+.coderabbit.yaml
+.github/dependabot.yml
+
 # Add more patterns to exclude specific files or directories
 # Examples:
 # docs/

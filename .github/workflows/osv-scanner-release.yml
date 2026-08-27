@@ -1,5 +1,5 @@
 # https://google.github.io/osv-scanner/github-action/#scan-on-release
-name: Go Release Process
+name: Release Process
 
 on:
   push:
@@ -18,8 +18,6 @@ jobs:
   osv-scan:
     uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@v2.5.1"
     with:
-      # Recursive scan supports multiple ecosystems:
-      # Go, Node.js, Python, Rust, Java, etc.
       scan-args: |-
         ./
     permissions:
@@ -29,26 +27,39 @@ jobs:
     name: Run unit tests
     runs-on: ubuntu-latest
     steps:
-      - name: Placeholder test step
-        run: echo "Configure project-specific tests here"
-    # Replace placeholder steps with actual project tests
-    # Examples:
-    # npm test
-    # go test ./...
-    # pytest
-    # cargo test
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify (typecheck, tests, catalog/stdout checks)
+        run: npm run verify
   release:
     needs: # Needs both tests and osv-scan to pass
       - tests
       - osv-scan
     runs-on: ubuntu-latest
-    # Your actual release steps
+    permissions:
+      contents: read
+      id-token: write # required for npm provenance
     steps:
-       - name: Placeholder release step
-         run: echo "Configure release steps here"
-    # Add actual release/build/publish steps here
-    # Examples:
-    # - Build binaries
-    # - Publish Docker image
-    # - Create GitHub Release
-    # - Upload artifacts
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: "npm"
+          registry-url: "https://registry.npmjs.org"
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Publish to npm
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
