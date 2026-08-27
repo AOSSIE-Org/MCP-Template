@@ -100,12 +100,16 @@ reviews:
     - "!**/dist/**" # Build output
 
   # Use the following tools when reviewing
+  # This project is a Node.js/TypeScript package (npm) — only tools relevant
+  # to that stack (plus repo-wide markdown/yaml/secrets checks) are enabled.
   tools:
-    shellcheck:
-      enabled: true
-    ruff:
+    eslint:
       enabled: true
     markdownlint:
+      enabled: true
+    yamllint:
+      enabled: true
+    gitleaks:
       enabled: true
     github-checks:
       enabled: true
@@ -114,46 +118,11 @@ reviews:
       enabled: true
       enabled_only: false
       level: default
-    biome:
-      enabled: true
-    hadolint:
-      enabled: true
-    swiftlint:
-      enabled: true
-    phpstan:
-      enabled: true
-      level: default
-    golangci-lint:
-      enabled: true
-    yamllint:
-      enabled: true
-    gitleaks:
-      enabled: true
-    checkov:
-      enabled: true
-    detekt:
-      enabled: true
-    eslint:
-      enabled: true
 
   # Apply the following labels to PRs
   labeling_instructions:
-    - label: Python Lang
-      instructions: Apply when the PR/MR contains changes to python source-code
-    - label: Solidity Lang
-      instructions: Apply when the PR/MR contains changes to solidity source-code
     - label: Typescript Lang
       instructions: Apply when the PR/MR contains changes to javascript or typescript source-code
-    - label: Ergoscript Lang
-      instructions: Apply when the PR/MR contains changes to ergoscript source-code
-    - label: Bash Lang
-      instructions: >-
-        Apply when the PR/MR contains changes to shell-scripts or BASH code
-        snippets
-    - label: Make Lang
-      instructions: >-
-        Apply when the PR/MR contains changes to the file `Makefile` or makefile
-        code snippets
     - label: Documentation
       instructions: >-
         Apply whenever project documentation (namely markdown source-code) is
@@ -180,122 +149,53 @@ reviews:
 
   # Custom review instructions for specific file patterns
   path_instructions:
-    # TypeScript/JavaScript files
-    - path: "**/*.{ts,tsx,js,jsx}"
+    # TypeScript/JavaScript source files
+    - path: "src/**/*.{ts,tsx,js,jsx}"
       instructions: |
-        NextJS:
-        - Ensure that "use client" is being used
-        - Ensure that only features that allow pure client-side rendering are used
-        - NextJS best practices (including file structure, API routes, and static generation methods) are used.
-      
+        This is a Node.js stdio MCP server (@modelcontextprotocol/sdk), not a web frontend.
+
         TypeScript:
         - Avoid 'any', use explicit types
         - Prefer 'import type' for type imports
         - Review for significant deviations from Google JavaScript style guide. Minor style issues are not a priority
-        - The code adheres to best practices associated with React
-        - The code adheres to best practices associated with React PWA
-        - The code adheres to best practices associated with SPA
-        - The code adheres to best practices recommended by lighthouse or similar tools for performance
-        - The code adheres to best practices associated with Node.js
+        - The code adheres to Node.js best practices (ESM, async/await, error handling)
         - The code adheres to best practices recommended for performance
+
+        MCP-specific:
+        - Tool/resource input schemas are validated with zod before use
+        - Nothing is written to stdout/stderr outside the MCP transport (would corrupt the stdio protocol)
+        - Tool handlers return well-formed MCP responses and surface errors via the protocol, not by throwing uncaught
 
         Security:
         - No exposed API keys or sensitive data
-        - Use expo-secure-store for sensitive storage
-        - Validate deep linking configurations
+        - No secrets or credentials logged or written to disk
         - Check for common security vulnerabilities such as:
-          - SQL Injection
-          - XSS (Cross-Site Scripting)
-          - CSRF (Cross-Site Request Forgery)
-          - Insecure dependencies
+          - Command/argument injection when shelling out
+          - Path traversal when reading/writing files
+          - Insecure or unvetted dependencies
           - Sensitive data exposure
 
-        Internationalization:
-        - User-visible strings should be externalized to resource files (i18n)
-
-    # HTML files
-    - path: "**/*.html"
+    # Build/codegen scripts
+    - path: "scripts/**/*.{js,mjs,cjs,ts}"
       instructions: |
-        Review the HTML code against the google html style guide and point out any mismatches. Ensure that:
-        - The code adheres to best practices recommended by lighthouse or similar tools for performance
+        These are Node.js build/codegen scripts (run via npm scripts, not shipped in the package).
+        - Prefer Node.js built-ins over adding new dependencies for simple scripting tasks
+        - Errors should fail the script with a non-zero exit code and a clear message
+        - Avoid hardcoding paths; resolve relative to the script/module location
 
-    # CSS files
-    - path: "**/*.css"
-      instructions: |
-        Review the CSS code against the google css style guide and point out any mismatches. Ensure that:
-        - The code adheres to best practices associated with CSS.
-        - The code adheres to best practices recommended by lighthouse or similar tools for performance.
-        - The code adheres to similar naming conventions for classes, ids.
-
-    # Python files
-    - path: "**/*.{py}"
-      instructions: |
-        Python:
-        - Check for major PEP 8 violations and Python best practices. 
-
-    # Solidity Smart Contract files
-    - path: "**/*.sol"
-      instructions: |
-        Solidity:
-        - Review the Solidity contracts for security vulnerabilities and adherence to best practices.
-        - Ensure immutability is used appropriately (e.g., `immutable` and `constant` where applicable).
-        - Ensure there are no unbounded loops that could lead to gas exhaustion.
-        - Verify correct and explicit visibility modifiers for all state variables and functions.
-        - Flag variables that are declared but used only once or are unnecessary.
-        - Identify potential gas optimization opportunities without compromising readability or security.
-        - Verify that any modification to contract logic includes corresponding updates to automated tests.
-        - Ensure failure paths and revert scenarios are explicitly handled and validated.
-        - Validate proper access control enforcement (e.g., Ownable, RBAC, role checks).
-        - Ensure consistent and correct event emission for all state-changing operations.
-        - Confirm architectural consistency with existing contracts (no unintended storage layout changes unless clearly documented).
-        - Flag major feature additions or architectural changes that were implemented without prior design discussion (if applicable).
-        - Flag pull requests that mix unrelated changes or multiple concerns in a single submission.
-        - Ensure security-sensitive logic changes are not introduced without adequate test coverage.
-        - Review for common smart contract vulnerabilities, including but not limited to:
-            - Reentrancy
-            - Improper input validation
-            - Access control bypass
-            - Integer overflows/underflows (if using unchecked blocks)
-            - Front-running risks where applicable
-
-
-    # Javascript/Typescript test files
-    - path: "**/*.test.{ts,tsx,js,jsx}"
+    # Test files (uses Node's built-in test runner: node --test)
+    - path: "test/**/*.test.{js,mjs,ts}"
       instructions: |
         Review test files for:
-        - Comprehensive coverage of component behavior
-        - Proper use of @testing-library/react-native
-        - Async behavior is properly tested
-        - Accessibility testing is included
+        - Comprehensive coverage of the behavior under test
+        - Correct use of Node's built-in test runner (node:test, node:assert)
+        - Async behavior is properly awaited
         - Test descriptions are sufficiently detailed to clarify the purpose of each test
-        - The tests are not tautological 
-
-    # Solidity test files
-    - path: "**/*.test.{sol}"
-      instructions: |
-        Review test files for:
-        - Comprehensive coverage of contract behavior.
-        - Coverage of success paths, edge cases, and failure/revert scenarios.
-        - Proper validation of access control restrictions.
-        - Verification of event emissions where applicable.
-        - Explicit validation of state changes after each relevant function call.
-        - Adequate test updates whenever contract logic is modified.
-        - Deterministic behavior (tests should not rely on implicit execution order or shared mutable state).
-        - Clear and descriptive test names that reflect the intended behavior being validated.
-
-
-    # Asset files (images, fonts, etc.)
-    - path: "assets/**/*"
-      instructions: |
-        Review asset files for:
-        - Image optimization (appropriate size and format)
-        - Proper @2x and @3x variants for different screen densities
-        - SVG assets are optimized
-        - Font files are licensed and optimized
+        - The tests are not tautological
 
     # Dependency manifest and lock files (e.g. updated by Dependabot, Renovate)
     - path: >-
-        **/{package.json,package-lock.json,yarn.lock,pnpm-lock.yaml,npm-shrinkwrap.json,requirements.txt,Pipfile,Pipfile.lock,pyproject.toml,poetry.lock,go.mod,go.sum,Cargo.toml,Cargo.lock,pom.xml,build.gradle,build.gradle.kts,gradle.lockfile,*.gemspec,Gemfile,Gemfile.lock}
+        **/{package.json,package-lock.json,yarn.lock,pnpm-lock.yaml,npm-shrinkwrap.json}
       instructions: |
         This file may be modified by a dependency bot (e.g., Dependabot, Renovate).
         Perform a structured dependency upgrade analysis:
