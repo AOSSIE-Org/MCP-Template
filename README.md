@@ -208,7 +208,7 @@ See [MAINTAINERS.md](./MAINTAINERS.md) for maintainers, mentors, and ideators.
 
 ## 📍 License
 
-This project is licensed under the MIT License.
+This project is licensed under the GNU General Public License v3.0.
 See the [LICENSE](LICENSE) file for details.
 
 ---
