@@ -42,6 +42,19 @@ function asLocalPath(target: string): string | null {
     return target;
 }
 
+/**
+ * Never log a target verbatim: `config.catalog.url` is project-configurable and
+ * may carry credentials or a signed query token (a private/gated catalog
+ * source). Logs get the origin only — enough to diagnose which host failed.
+ */
+function redactTarget(target: string): string {
+    try {
+        return new URL(target).origin;
+    } catch {
+        return 'local';
+    }
+}
+
 async function loadOnce(target: string, etag: string | null): Promise<{ raw: unknown; etag: string | null } | 'not-modified'> {
     const localPath = asLocalPath(target);
     if (localPath) {
@@ -75,7 +88,7 @@ async function loadWithRetry(target: string, etag: string | null) {
             if (attempt === attempts) break;
             const backoffMs = 250 * 2 ** (attempt - 1);
             log.debug(`catalog fetch attempt ${attempt}/${attempts} failed, retrying`, {
-                target,
+                target: redactTarget(target),
                 backoffMs,
                 error: String(err)
             });
@@ -97,7 +110,7 @@ async function refresh(): Promise<Catalog> {
             if (result === 'not-modified' && entry) {
                 entry = { ...entry, fetchedAt: Date.now(), source: 'remote' };
                 lastError = null;
-                log.debug('catalog unchanged (304)', { target });
+                log.debug('catalog unchanged (304)', { target: redactTarget(target) });
                 return entry.catalog;
             }
             if (result === 'not-modified') continue;
@@ -111,14 +124,14 @@ async function refresh(): Promise<Catalog> {
             };
             lastError = null;
             log.info('catalog loaded', {
-                target,
+                target: redactTarget(target),
                 items: catalog.items.length,
                 generatedAt: catalog.generatedAt ?? null
             });
             return catalog;
         } catch (err) {
             lastError = String(err instanceof Error ? err.message : err);
-            log.warn('catalog source failed', { target, error: lastError });
+            log.warn('catalog source failed', { target: redactTarget(target), error: lastError });
         }
     }
 

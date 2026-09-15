@@ -9,7 +9,7 @@
     "stdio",
     "template"
   ],
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "author": "AOSSIE",
   "homepage": "https://github.com/AOSSIE-Org/MCP-Template#readme",
   "repository": {
