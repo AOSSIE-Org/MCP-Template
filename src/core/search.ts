@@ -28,11 +28,22 @@ export interface ScoredItem {
 }
 
 /**
+ * The only single letters that are English words rather than search terms.
+ * Scoring one would surface the whole catalog, since it is a substring of most
+ * words — and it would dilute the coverage bonus for the terms that matter.
+ */
+const SINGLE_CHAR_STOPWORDS = new Set(['a', 'i']);
+
+/**
  * `+`, `#` and `.` survive splitting so that `c++`, `c#` and `node.js` stay whole.
  *
- * Single characters are dropped only when the query has something longer to go
- * on: "solar a" should rank exactly like "solar", but a bare "R" must still be a
+ * Noise words are dropped only when the query has something else to go on:
+ * "solar a" should rank exactly like "solar", but a bare "a" must still be a
  * real search rather than an accidental match-everything.
+ *
+ * Length is deliberately not the test. A one-character token is as likely to be
+ * the entire point of the query ("C code", "R packages") as it is to be filler,
+ * so only the single letters that are genuinely words get discarded.
  */
 export function tokenize(input: string): string[] {
     const tokens = input
@@ -40,7 +51,9 @@ export function tokenize(input: string): string[] {
         .split(/[^a-z0-9+#.]+/)
         .filter(Boolean);
 
-    return tokens.some(token => token.length > 1) ? tokens.filter(token => token.length > 1) : tokens;
+    const meaningful = tokens.filter(token => !SINGLE_CHAR_STOPWORDS.has(token));
+
+    return meaningful.length > 0 ? meaningful : tokens;
 }
 
 function countOccurrences(haystack: string, token: string): number {
