@@ -331,3 +331,12 @@ src/generated/runtime.ts
 
 # Built by scripts/build-catalog.mjs and deployed to Pages by CI.
 catalog/dist/
+
+# Node.js dependencies and build artifacts
+node_modules/
+dist/
+*.tsbuildinfo
+*.tgz
+.env
+.env.*
+!.env.example
