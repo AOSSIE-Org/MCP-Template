@@ -14,6 +14,7 @@ const WEIGHTS = { id: 40, title: 8, tag: 5, category: 3, summary: 2, content: 0.
 
 /** Cap the content contribution so one long document cannot outrank a precise title hit. */
 const MAX_CONTENT_SCORE = 4;
+const SINGLE_LETTER_STOP_WORDS = new Set(['a', 'i']);
 
 export interface SearchFilters {
     category?: string;
@@ -40,7 +41,10 @@ export function tokenize(input: string): string[] {
         .split(/[^a-z0-9+#.]+/)
         .filter(Boolean);
 
-    return tokens.some(token => token.length > 1) ? tokens.filter(token => token.length > 1) : tokens;
+    const searchable = tokens.filter(
+        token => token.length > 1 || !SINGLE_LETTER_STOP_WORDS.has(token)
+    );
+    return searchable.length > 0 ? searchable : tokens;
 }
 
 function countOccurrences(haystack: string, token: string): number {
