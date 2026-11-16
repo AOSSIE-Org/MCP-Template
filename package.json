@@ -51,7 +51,7 @@
     "check:stdout": "node scripts/check-stdout.mjs",
     "check:catalog": "node scripts/build-catalog.mjs --check",
     "verify": "npm run check:stdout && npm run check:catalog && npm run typecheck && npm test",
-    "pretest": "npm run build",
+    "pretest": "npm run build && npm run catalog",
     "test": "node --test \"test/**/*.test.mjs\"",
     "catalog": "node scripts/build-catalog.mjs",
     "onboard": "node scripts/onboard.mjs",
