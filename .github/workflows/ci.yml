@@ -61,6 +61,7 @@ jobs:
 
           NAME="$(node -p "require('./package.json').name")"
           BIN="$(node -p "Object.values(require('./package.json').bin)[0]")"
+          BIN_NAME="$(node -p "Object.keys(require('./package.json').bin)[0]")"
           TARBALL="$PWD/$(npm pack --silent | tail -1)"
 
           mkdir -p /tmp/consumer && cd /tmp/consumer
@@ -70,12 +71,17 @@ jobs:
           ENTRY="node_modules/$NAME/$BIN"
           test -f "$ENTRY" || { echo "::error::$BIN is missing from the published tarball"; exit 1; }
 
+          # Run the linked command, not `node <file>`, so a broken shebang or a
+          # missing bin link fails here instead of on a user's machine.
+          CMD="node_modules/.bin/$BIN_NAME"
+          test -x "$CMD" || { echo "::error::$BIN_NAME was not linked into node_modules/.bin"; exit 1; }
+
           # One initialize frame is enough to prove the package starts and speaks
           # the protocol. `timeout` bounds it because a stdio server has no reason
           # to exit on its own.
           RESPONSE="$(printf '%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
-            | timeout 30 node "$ENTRY" | head -1)"
+            | timeout 30 "$CMD" | head -1)"
 
           echo "$RESPONSE"
           grep -q '"serverInfo"' <<< "$RESPONSE" \

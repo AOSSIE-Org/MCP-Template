@@ -33,10 +33,26 @@ config.server.version = pkg.version;
 await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
 console.error(`[sync-version] mcp.config.json ${previous} -> ${pkg.version}`);
 
-// Stage it so `npm version` includes it in the release commit. Harmless outside
-// a repo or when run by hand — a failure here is not worth aborting the bump.
+// Stage it so `npm version` includes it in the release commit. Outside a git
+// repo there is nothing to stage. Inside one, a failed `git add` (an index lock,
+// say) would let npm tag a commit without this change, so it must fail the bump.
+let inRepo = false;
 try {
-    execFileSync('git', ['add', 'mcp.config.json'], { cwd: root, stdio: 'ignore' });
+    inRepo =
+        execFileSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] })
+            .toString()
+            .trim() === 'true';
 } catch {
-    console.error('[sync-version] could not stage mcp.config.json; commit it yourself');
+    inRepo = false;
+}
+
+if (inRepo) {
+    try {
+        execFileSync('git', ['add', 'mcp.config.json'], { cwd: root, stdio: ['ignore', 'ignore', 'pipe'] });
+    } catch (err) {
+        console.error(`[sync-version] could not stage mcp.config.json: ${err.stderr?.toString().trim() || err.message}`);
+        process.exit(1);
+    }
+} else {
+    console.error('[sync-version] not in a git repo; commit mcp.config.json yourself');
 }

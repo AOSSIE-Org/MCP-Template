@@ -166,9 +166,12 @@ on.
 # Data — deploys on every push to main touching catalog/**
 git add -A && git commit -m "Add the forecast catalog" && git push
 
-# Code — add an NPM_TOKEN repo secret first (an npm automation token)
-npm version 0.1.0
-git push --follow-tags
+# Code — add an NPM_TOKEN repo secret first (an npm automation token).
+# The first release is the version already in package.json, so tag it directly:
+git tag v0.1.0 && git push origin v0.1.0
+# Every later release bumps the version and tags in one step:
+#   npm version patch   (or minor / major)
+#   git push --follow-tags
 ```
 
 `publish.yml` checks that the tag matches both `package.json` and

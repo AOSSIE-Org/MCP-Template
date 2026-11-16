@@ -22,7 +22,20 @@ permissions:
   id-token: write # required for npm provenance
 
 jobs:
+  # A release must not ship a dependency with a known vulnerability, so the
+  # publish job below waits for this scan to pass.
+  osv-scan:
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.5.1"
+    with:
+      scan-args: |-
+        ./
+    permissions:
+      actions: read # the reusable workflow reads run metadata
+      contents: read # checkout
+      security-events: write # upload SARIF results to the Security tab
+
   publish:
+    needs: osv-scan
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

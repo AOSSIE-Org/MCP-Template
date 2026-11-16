@@ -169,8 +169,12 @@ requests/day, plus D1 and KV) is the usual answer for an org tool, and there is
 an official authless remote-MCP template. Deployment is a push.
 
 The migration is mechanical on this side: a Worker imports `createServer()` and
-wires it to `StreamableHTTPServerTransport`. Tool implementations, the catalog
-client and search do not change.
+wires it to `WebStandardStreamableHTTPServerTransport`, which takes the Web
+`Request` a Worker's `fetch` handler receives. (`StreamableHTTPServerTransport`
+expects Node's `IncomingMessage`/`ServerResponse` and does not fit a Worker.)
+Enable the `nodejs_compat` compatibility flag in `wrangler.toml` for the SDK's
+Node built-in imports. Tool implementations, the catalog client and search do
+not change.
 
 **But be clear-eyed about what you are taking on.** Two things.
 
@@ -216,10 +220,20 @@ what essentially every MCP example, tutorial and blog post in existence uses.
 For a template aimed at volunteer contributors, being able to search for an
 answer and have it apply matters more than being on the newest major.
 
-When migrating is worth it, the changes are confined to two files:
+When migrating is worth it, the changes are confined to the files that import
+the SDK:
 
+- `package.json` — replace `@modelcontextprotocol/sdk` with
+  `@modelcontextprotocol/server` (and `@modelcontextprotocol/client`, which the
+  protocol tests use)
 - `src/index.ts` — `StdioServerTransport` moves to `@modelcontextprotocol/server/stdio`
-- `src/tools/registry.ts` — raw shapes become `z.object({...})` (Standard Schema)
+- `src/server.ts` and `src/resources/items.ts` — `McpServer` and
+  `ResourceTemplate` move to `@modelcontextprotocol/server`
+- `src/tools/registry.ts` — the type imports move, and raw shapes become
+  `z.object({...})` (Standard Schema)
+- `test/protocol.test.mjs` — `Client` and `StdioClientTransport` move to
+  `@modelcontextprotocol/client`
 
-Everything else is unaffected, which is itself a reason the registry indirection
-is there.
+Follow the SDK's own v1 → v2 migration guide for the details. Tool handlers, the
+catalog client and search are unaffected, which is itself a reason the registry
+indirection is there.

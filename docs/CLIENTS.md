@@ -44,7 +44,8 @@ Restart the app. On Windows, if `npx` is not found, use the full path to
 
 ## VS Code
 
-`.mcp.json` in the workspace root, or `.vscode/mcp.json`:
+`.vscode/mcp.json` in the workspace. VS Code uses a `servers` key here, not
+`mcpServers`:
 
 ```json
 {
@@ -86,7 +87,16 @@ because stdio support is close to universal in desktop and editor clients.
 
 ## Running a local build
 
-While developing, point at your checkout instead of npm:
+While developing, point at your checkout instead of npm. A fresh checkout has
+neither the server nor the catalog built yet, so build both first:
+
+```bash
+npm install
+npm run build      # dist/index.js
+npm run catalog    # catalog/dist/catalog.json
+```
+
+Then:
 
 ```json
 {
@@ -104,8 +114,11 @@ While developing, point at your checkout instead of npm:
 ```
 
 Absolute paths — the client's working directory is not yours. Pointing
-`AOSSIE_MCP_CATALOG_URL` at a local file means edits show up on the next cache
-expiry with no deploy, and the server never touches the network.
+`AOSSIE_MCP_CATALOG_URL` at a local file means the server never touches the
+network, and changes need no deploy. The server reads the built
+`catalog/dist/catalog.json`, not the Markdown under `catalog/sources/`, so run
+`npm run catalog` after each source edit; the rebuilt file is picked up on the
+next cache expiry.
 
 Run both the published and the local server side by side under different keys;
 `catalog_info` tells you which one answered.

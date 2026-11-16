@@ -27,6 +27,8 @@ const readJson = path => JSON.parse(readFileSync(resolve(root, path), 'utf8'));
 
 const config = readJson('mcp.config.json');
 const catalog = readJson('catalog/dist/catalog.json');
+// Successful searches ask for as much as the schema allows, never more.
+const maxLimit = config.limits.searchMaxLimit;
 
 /* Mirrors the derivation in src/core/config.ts. */
 const slug = value =>
@@ -112,7 +114,7 @@ test('exposes exactly the registered tools', async () => {
 
 test('search finds an entry by words from its title', async () => {
     const result = structured(
-        await client.callTool({ name: TOOLS.search, arguments: { query: sampleQuery, limit: 50 } })
+        await client.callTool({ name: TOOLS.search, arguments: { query: sampleQuery, limit: maxLimit } })
     );
 
     assert.ok(result.totalMatches >= 1, `nothing matched "${sampleQuery}"`);
@@ -147,7 +149,7 @@ test('search filters by category', async () => {
     const result = structured(
         await client.callTool({
             name: TOOLS.search,
-            arguments: { query: '', category: sample.category, limit: 50 }
+            arguments: { query: '', category: sample.category, limit: maxLimit }
         })
     );
 
@@ -241,7 +243,13 @@ test('resources are listed and readable', async t => {
     assert.ok(read.contents[0].text.includes(sample.title));
 });
 
-test('an unreachable catalog degrades to the bundled snapshot', async () => {
+// localFallbackUrl is tried before the catalog URL and has no env override, so
+// with one configured the server is never actually offline in this test.
+const offlineSkip = config.catalog.localFallbackUrl
+    ? 'catalog.localFallbackUrl is set, so the server cannot be forced offline'
+    : false;
+
+test('an unreachable catalog degrades to the bundled snapshot', { skip: offlineSkip }, async () => {
     const offline = await connect({
         AOSSIE_MCP_CATALOG_URL: resolve(root, 'catalog/dist/does-not-exist.json'),
         AOSSIE_MCP_LOG_LEVEL: 'silent'

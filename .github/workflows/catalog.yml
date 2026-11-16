@@ -19,10 +19,8 @@ on:
     # and a broken builder is noticed before someone needs it.
     - cron: '17 4 * * 1'
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+# Nothing by default; each job asks for only what it needs.
+permissions: {}
 
 # Never let two deploys race; the newer content should win.
 concurrency:
@@ -32,6 +30,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout
+      pages: read # configure-pages reads the existing site config
     steps:
       - uses: actions/checkout@v4
 
@@ -63,6 +64,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write # publish the artifact to Pages
+      id-token: write # deploy-pages authenticates with an OIDC token
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

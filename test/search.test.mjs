@@ -39,9 +39,10 @@ test('ranks a title match above a repeated body mention', () => {
 test('covering the whole query outranks matching half of it', () => {
     const results = searchItems(items, 'solar oracle');
     assert.equal(results[0].item.id, 'solar-oracle');
-    // `agora` matches only "solar", so its score is halved by query coverage.
+    // `agora` matches only "solar", so query coverage halves its score exactly.
     const agora = results.find(r => r.item.id === 'agora');
-    assert.ok(agora.score < results[0].score / 2);
+    const agoraAlone = searchItems(items, 'solar').find(r => r.item.id === 'agora');
+    assert.ok(Math.abs(agora.score - agoraAlone.score / 2) < 1e-9);
 });
 
 test('reports which fields matched', () => {

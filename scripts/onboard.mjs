@@ -63,10 +63,11 @@ const repo = String(flags.repo ?? (await ask('GitHub repo (owner/name)', `AOSSIE
 if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) fail(`--repo must be "owner/name", got "${repo}"`);
 const [owner, repoName] = repo.split('/');
 
-const scope = String(flags.scope ?? (await ask('npm scope (blank for unscoped)', '@aossie'))).replace(
-    /^@?/,
-    match => (match === '' ? '' : '@')
-);
+// The prompt's default is @aossie, so a blank answer cannot mean "unscoped";
+// "none" does. Non-interactively, --scope= (empty) also means unscoped.
+const scopeAnswer = String(flags.scope ?? (await ask('npm scope ("none" for unscoped)', '@aossie'))).trim();
+const scope =
+    scopeAnswer === '' || scopeAnswer.toLowerCase() === 'none' ? '' : `@${scopeAnswer.replace(/^@/, '')}`;
 const packageName = scope ? `${scope}/${project}-mcp` : `${project}-mcp`;
 
 const noun = slug(flags.noun ?? (await ask('What is one catalog entry called? (singular)', 'item')));
@@ -181,7 +182,7 @@ try {
         .replaceAll('get_item', `get_${noun}`);
     await writeFile(resolve(root, 'README.md'), rewritten, 'utf8');
 } catch (err) {
-    console.error(`[onboard] warn: could not rewrite README.md (${err.message})`);
+    fail(`could not rewrite README.md (${err.message}); the other files were updated, fix README.md by hand`);
 }
 
 console.error(`
