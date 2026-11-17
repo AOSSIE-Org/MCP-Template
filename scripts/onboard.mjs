@@ -1,130 +1,208 @@
 #!/usr/bin/env node
 /**
- * Rewrites the template's project-specific identity in one pass.
+ * Rewrites the template's placeholders for one project, in one pass.
  *
- * Interactive use: `npm run onboard`
- * Automation: `npm run onboard -- --project=solar-oracle --repo=AOSSIE-Org/SolarOracle
- *   --noun=forecast --nouns=forecasts --clean --yes`
+ * The alternative is a checklist of "now edit these five files", which is where
+ * template onboarding usually goes wrong — someone renames the package but not
+ * the server, or the catalog URL but not the repository, and the mismatch only
+ * shows up as a confusing runtime failure.
+ *
+ *   npm run onboard                                  # interactive
+ *   npm run onboard -- --project=solar-oracle \
+ *                      --repo=AOSSIE-Org/SolarOracle \
+ *                      --noun=forecast --clean
+ *
+ * Flags: --project --repo --scope --noun --nouns --title --description
+ *        --clean (drop the demo catalog content)  --yes (skip confirmation)
  */
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, rm, mkdir } from 'node:fs/promises';
+import { createInterface } from 'node:readline/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import readline from 'node:readline/promises';
-import { stdin as input, stdout as output } from 'node:process';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const args = new Map(
-    process.argv.slice(2)
+
+/* ------------------------------------------------------------------- input */
+
+const flags = Object.fromEntries(
+    process.argv
+        .slice(2)
         .filter(arg => arg.startsWith('--'))
         .map(arg => {
-            const [key, ...value] = arg.slice(2).split('=');
-            return [key, value.join('=') || true];
+            const [key, ...rest] = arg.slice(2).split('=');
+            return [key, rest.length ? rest.join('=') : true];
         })
 );
 
-if (args.has('help')) {
+if (flags.help) {
     console.log(
-        'Usage: node scripts/onboard.mjs [--project=slug] [--repo=owner/repo] ' +
+        'Usage: node scripts/onboard.mjs [--project=slug] [--repo=owner/name] ' +
             '[--noun=item] [--nouns=items] [--clean] [--yes]'
     );
     process.exit(0);
 }
 
-const questions = async () => {
-    const prompt = readline.createInterface({ input, output });
-    try {
-        return {
-            project: await prompt.question('Project slug: '),
-            repo: await prompt.question('GitHub repository (owner/name): '),
-            noun: await prompt.question('Singular item noun: '),
-            nouns: await prompt.question('Plural item noun: ')
-        };
-    } finally {
-        prompt.close();
-    }
-};
+const slug = value =>
+    String(value)
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
 
-const supplied = {
-    project: args.get('project'),
-    repo: args.get('repo'),
-    noun: args.get('noun'),
-    nouns: args.get('nouns')
-};
-const values = Object.values(supplied).every(value => typeof value === 'string' && value)
-    ? supplied
-    : await questions();
+const rl = process.stdin.isTTY ? createInterface({ input: process.stdin, output: process.stderr }) : null;
 
-const project = String(values.project).trim().toLowerCase();
-const repo = String(values.repo).trim();
-const noun = String(values.noun).trim().toLowerCase();
-const nouns = String(values.nouns).trim().toLowerCase();
-
-if (!/^[a-z0-9][a-z0-9-]*$/.test(project)) {
-    throw new Error('project must be a lowercase slug containing letters, numbers, and hyphens');
+async function ask(question, fallback) {
+    if (!rl) return fallback;
+    const answer = (await rl.question(`${question}${fallback ? ` [${fallback}]` : ''}: `)).trim();
+    return answer || fallback;
 }
-if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) throw new Error('repo must look like owner/name');
-if (!/^[a-z][a-z0-9_-]*$/.test(noun) || !/^[a-z][a-z0-9_-]*$/.test(nouns)) {
-    throw new Error('noun and nouns must contain lowercase letters, numbers, underscores, or hyphens');
+
+function fail(message) {
+    console.error(`[onboard] ${message}`);
+    process.exit(1);
 }
-if (!args.has('yes')) {
-    const prompt = readline.createInterface({ input, output });
-    const answer = await prompt.question(
-        `Onboard ${repo} as ${noun}/${nouns}? This rewrites project identity. [y/N] `
-    );
-    prompt.close();
-    if (!/^y(es)?$/i.test(answer.trim())) {
-        console.error('[onboard] cancelled');
+
+/* ---------------------------------------------------------------- gather */
+
+const project = slug(flags.project ?? (await ask('Project slug (e.g. solar-oracle)', '')));
+if (!project) fail('a project slug is required — pass --project=my-project');
+
+const repo = String(flags.repo ?? (await ask('GitHub repo (owner/name)', `AOSSIE-Org/${project}`)));
+if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) fail(`--repo must be "owner/name", got "${repo}"`);
+const [owner, repoName] = repo.split('/');
+
+// The prompt's default is @aossie, so a blank answer cannot mean "unscoped";
+// "none" does. Non-interactively, --scope= (empty) also means unscoped.
+const scopeAnswer = String(flags.scope ?? (await ask('npm scope ("none" for unscoped)', '@aossie'))).trim();
+const scope =
+    scopeAnswer === '' || scopeAnswer.toLowerCase() === 'none' ? '' : `@${scopeAnswer.replace(/^@/, '')}`;
+const packageName = scope ? `${scope}/${project}-mcp` : `${project}-mcp`;
+
+const noun = slug(flags.noun ?? (await ask('What is one catalog entry called? (singular)', 'item')));
+const nouns = slug(flags.nouns ?? (await ask('...and the plural', `${noun}s`)));
+
+const title = String(
+    flags.title ??
+        (await ask(
+            'Human-readable server title',
+            project.replace(/(^|-)([a-z])/g, (_, sep, ch) => (sep ? ' ' : '') + ch.toUpperCase())
+        ))
+);
+const description = String(
+    flags.description ?? (await ask('One-line description', `MCP server for the AOSSIE ${title} project.`))
+);
+
+// GitHub Pages serves a project site at <owner>.github.io/<repo>, lowercased.
+const catalogUrl = `https://${owner.toLowerCase()}.github.io/${repoName}/catalog.json`;
+const clean = Boolean(flags.clean);
+
+const plan = [
+    ['npm package', packageName],
+    ['MCP server name', `aossie-${project}`],
+    ['server title', title],
+    ['tool names', `search_${nouns}, get_${noun}, list_categories, catalog_info`],
+    ['catalog URL', catalogUrl],
+    ['repository', `https://github.com/${repo}`],
+    ['demo content', clean ? 'REMOVED' : 'kept (pass --clean to remove)']
+];
+
+console.error('\n[onboard] plan:');
+for (const [label, value] of plan) console.error(`  ${label.padEnd(18)} ${value}`);
+
+if (!flags.yes && rl) {
+    const go = await ask('\nApply? (y/N)', 'N');
+    if (!/^y(es)?$/i.test(go)) {
+        console.error('[onboard] aborted, nothing written');
+        rl.close();
         process.exit(0);
     }
 }
+rl?.close();
 
-const packagePath = resolve(root, 'package.json');
-const configPath = resolve(root, 'mcp.config.json');
-const metaPath = resolve(root, 'catalog/catalog.meta.json');
-const readmePath = resolve(root, 'README.md');
-const packageJson = JSON.parse(await readFile(packagePath, 'utf8'));
-const config = JSON.parse(await readFile(configPath, 'utf8'));
-const meta = JSON.parse(await readFile(metaPath, 'utf8'));
+/* ----------------------------------------------------------------- apply */
 
-packageJson.name = `@aossie/${project}-mcp`;
-packageJson.description = `MCP server for ${repo}`;
-packageJson.repository = { type: 'git', url: `git+https://github.com/${repo}.git` };
-packageJson.bugs = { url: `https://github.com/${repo}/issues` };
-packageJson.homepage = `https://github.com/${repo}#readme`;
-packageJson.bin = { [`aossie-${project}-mcp`]: 'dist/index.js' };
+const readJson = async path => JSON.parse(await readFile(resolve(root, path), 'utf8'));
+const writeJson = (path, value) =>
+    writeFile(resolve(root, path), `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 
+// package.json — identity and where the bin lands.
+const pkg = await readJson('package.json');
+pkg.name = packageName;
+pkg.version = '0.1.0';
+pkg.description = description;
+pkg.homepage = `https://github.com/${repo}#readme`;
+pkg.repository = { type: 'git', url: `git+https://github.com/${repo}.git` };
+pkg.bugs = { url: `https://github.com/${repo}/issues` };
+pkg.bin = { [`aossie-${project}-mcp`]: 'dist/index.js' };
+pkg.keywords = ['mcp', 'modelcontextprotocol', 'aossie', project];
+await writeJson('package.json', pkg);
+
+// mcp.config.json — the runtime surface.
+const config = await readJson('mcp.config.json');
+config.$comment = 'Edit this file to reconfigure the server, then run `npm run gen && npm run build`.';
 config.server.name = `aossie-${project}`;
-config.server.title = `${project} MCP`;
+config.server.title = title;
+config.server.version = '0.1.0';
 config.server.instructions =
-    `Read-only access to the ${repo} catalog. Use search_${nouns} to discover entries, ` +
-    `then get_${noun} to read one in full.`;
-config.catalog.url = `https://${repo.split('/')[0].toLowerCase()}.github.io/${repo.split('/')[1]}/catalog.json`;
+    `Read-only access to the ${title} ${nouns} catalog. ` +
+    `Call search_${nouns} with keywords to find candidates, then get_${noun} with an id to read one in full. ` +
+    `Use list_categories to see how the catalog is organised, and catalog_info if results look empty or stale.`;
+config.catalog.url = catalogUrl;
 config.naming.itemNoun = noun;
 config.naming.itemNounPlural = nouns;
+await writeJson('mcp.config.json', config);
 
+// catalog.meta.json — project identity in the published data.
+const meta = await readJson('catalog/catalog.meta.json');
 meta.project = {
-    ...meta.project,
-    name: `${project} MCP`,
-    description: `Catalog for ${repo}.`,
+    name: title,
+    description,
+    homepage: `https://github.com/${repo}`,
     repository: `https://github.com/${repo}`
 };
+if (clean) {
+    meta.categories = [
+        { id: 'general', name: 'General', description: `${title} ${nouns}.` }
+    ];
+}
+await writeJson('catalog/catalog.meta.json', meta);
 
-let readme = await readFile(readmePath, 'utf8');
-readme = readme.replace(/<h1>AOSSIE MCP Template<\/h1>/, `<h1>${project} MCP</h1>`);
-readme = readme.replace(/AOSSIE MCP Template/g, `${project} MCP`);
-readme = readme.replace(/@aossie\/<project>-mcp/g, `@aossie/${project}-mcp`);
-readme = readme.replace(/aossie-<project>/g, `aossie-${project}`);
-readme = readme.replace(/<org>\.github\.io\/<repo>/g, `${repo.split('/')[0].toLowerCase()}.github.io/${repo.split('/')[1]}`);
-
-await writeFile(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
-await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
-await writeFile(metaPath, `${JSON.stringify(meta, null, 2)}\n`);
-await writeFile(readmePath, readme);
-
-if (args.has('clean')) {
-    const sources = resolve(root, 'catalog/sources');
-    for (const entry of await readdir(sources)) await rm(resolve(sources, entry), { recursive: true, force: true });
-    await mkdir(sources, { recursive: true });
+if (clean) {
+    await rm(resolve(root, 'catalog/sources'), { recursive: true, force: true });
+    await mkdir(resolve(root, 'catalog/sources/general'), { recursive: true });
+    await writeFile(
+        resolve(root, 'catalog/sources/general/example.md'),
+        `---\ntitle: Example ${noun}\nsummary: Replace this file with your project's content — one file is one catalog entry.\ntags: [example]\n---\n\nFront matter above supplies the metadata; everything below it becomes the body\nthat \`get_${noun}\` returns. Directory names under \`catalog/sources/\` become\ncategories, and must be declared in \`catalog/catalog.meta.json\`.\n\nRun \`npm run catalog\` to build and validate.\n`,
+        'utf8'
+    );
+    console.error('[onboard] replaced catalog/sources with a single placeholder entry');
 }
 
-console.error(`[onboard] configured ${repo} as ${project} (${noun}/${nouns})`);
+// README — swap the placeholders a reader would otherwise trip over.
+try {
+    const readme = await readFile(resolve(root, 'README.md'), 'utf8');
+    const rewritten = readme
+        .replaceAll('@aossie/mcp-template', packageName)
+        .replaceAll('aossie-mcp-template', `aossie-${project}`)
+        .replaceAll('AOSSIE-Org/MCP-Template', repo)
+        .replaceAll('aossie-org.github.io/MCP-Template', `${owner.toLowerCase()}.github.io/${repoName}`)
+        .replaceAll('search_items', `search_${nouns}`)
+        .replaceAll('get_item', `get_${noun}`);
+    await writeFile(resolve(root, 'README.md'), rewritten, 'utf8');
+} catch (err) {
+    fail(`could not rewrite README.md (${err.message}); the other files were updated, fix README.md by hand`);
+}
+
+console.error(`
+[onboard] done. Next:
+
+  1. npm run catalog -- --snapshot    build the catalog and refresh the offline fallback
+  2. npm run build && npm test        confirm the server still passes end to end
+  3. npm run inspect                  drive it by hand in the MCP Inspector
+  4. Settings > Pages > source: GitHub Actions, then push to main
+  5. Add an NPM_TOKEN repository secret, tag v0.1.0 and push the tag
+
+  Users then add, with no server involved anywhere:
+
+    { "mcpServers": { "${project}": { "command": "npx", "args": ["-y", "${packageName}"] } } }
+`);
