@@ -34,6 +34,14 @@ const flags = Object.fromEntries(
         })
 );
 
+if (flags.help) {
+    console.log(
+        'Usage: node scripts/onboard.mjs [--project=slug] [--repo=owner/name] ' +
+            '[--noun=item] [--nouns=items] [--clean] [--yes]'
+    );
+    process.exit(0);
+}
+
 const slug = value =>
     String(value)
         .trim()

@@ -338,3 +338,5 @@ dist/
 *.tsbuildinfo
 *.tgz
 .env
+.env.*
+!.env.example
