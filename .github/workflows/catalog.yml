@@ -55,7 +55,7 @@ jobs:
             echo "- built: $(node -p "require('./catalog/dist/catalog.json').generatedAt")"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
 
       - uses: actions/upload-pages-artifact@v3
         with:
